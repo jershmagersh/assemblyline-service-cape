@@ -14,11 +14,18 @@ from zipfile import ZipFile
 
 import requests
 from assemblyline.common.exceptions import NonRecoverableError, RecoverableError
-from assemblyline.common.forge import get_identify, get_classification
-from assemblyline.common.identify_defaults import magic_patterns, trusted_mimes, type_to_extension
+from assemblyline.common.forge import get_classification, get_identify
+from assemblyline.common.identify_defaults import (
+    magic_patterns,
+    trusted_mimes,
+    type_to_extension,
+)
 from assemblyline.common.isotime import epoch_to_local
 from assemblyline.common.str_utils import safe_str
-from assemblyline_service_utilities.common.dynamic_service_helper import OntologyResults, attach_dynamic_ontology
+from assemblyline_service_utilities.common.dynamic_service_helper import (
+    OntologyResults,
+    attach_dynamic_ontology,
+)
 from assemblyline_service_utilities.common.tag_helper import add_tag
 from assemblyline_v4_service.common.api import ServiceAPIError
 from assemblyline_v4_service.common.base import ServiceBase
@@ -33,21 +40,27 @@ from assemblyline_v4_service.common.result import (
     TextSectionBody,
 )
 from assemblyline_v4_service.common.task import PARENT_RELATION
+from pefile import PE, PEFormatError
+from retrying import RetryError, retry
+from SetSimilaritySearch import SearchIndex
+
 from cape.cape_result import (
     ANALYSIS_ERRORS,
     BAT_COMMANDS_PATH,
     BUFFER_PATH,
+    BROWSER_PATH,
+    CLIPBOARD_PATH,
     GUEST_CANNOT_REACH_HOST,
     INETSIM,
     LINUX_IMAGE_PREFIX,
     MACHINE_NAME_REGEX,
+    OFFLINE_IMAGE_PREFIX,
+    ONLINE_IMAGE_PREFIX,
     PE_INDICATORS,
     PS1_COMMANDS_PATH,
     SIGNATURES_SECTION_TITLE,
     SUPPORTED_EXTENSIONS,
     WINDOWS_IMAGE_PREFIX,
-    OFFLINE_IMAGE_PREFIX,
-    ONLINE_IMAGE_PREFIX,
     convert_processtree_id_to_tree_id,
     generate_al_result,
     x64_IMAGE_SUFFIX,
@@ -55,15 +68,13 @@ from cape.cape_result import (
 )
 from cape.safe_process_tree_leaf_hashes import SAFE_PROCESS_TREE_LEAF_HASHES
 from cape.yara_modules import *
-from pefile import PE, PEFormatError
-from retrying import RetryError, retry
-from SetSimilaritySearch import SearchIndex
 
 APIv2_BASE_ENDPOINT = "apiv2"
 
 HOLLOWSHUNTER_REPORT_REGEX = r"hollowshunter\/hh_process_[0-9]{3,}_(dump|scan)_report\.json$"
 HOLLOWSHUNTER_DUMP_REGEX = r"hollowshunter\/hh_process_[0-9]{3,}_[a-zA-Z0-9]*(\.*[a-zA-Z0-9]+)+\.(exe|shc|dll)$"
 INJECTED_EXE_REGEX = r"^\/tmp\/%s_injected_memory_[0-9]{1,2}\.exe$"
+EXTRACTED_FILES_REGEX = r"^[\w,\s-]+-[A-Fa-f0-9]{64}$"
 
 CAPE_API_SUBMIT_URL = "tasks/create/url/"
 CAPE_API_SUBMIT = "tasks/create/file/"
@@ -239,6 +250,7 @@ class CAPE(ServiceBase):
         self.uwsgi_with_recycle = False
         self.delete_cape_runs = DEFAULT_DELETE_CAPE_RUNS
         self.root_file_only = True
+        self.delete_cape_runs = DEFAULT_DELETE_CAPE_RUNS
         self.classification = get_classification()
 
         # Properies pertaining to using YARA rules with CAPE
@@ -261,6 +273,7 @@ class CAPE(ServiceBase):
         self.uwsgi_with_recycle = self.config.get("uwsgi_with_recycle", False)
         self.delete_cape_runs = self.config.get("delete_cape_runs", DEFAULT_DELETE_CAPE_RUNS)
         self.root_file_only = self.config.get("root_file_only", True)
+        self.delete_cape_runs = self.config.get("delete_cape_runs", DEFAULT_DELETE_CAPE_RUNS)
         self.use_process_tree_inspection = self.config.get("use_process_tree_inspection", False)
         self.routes = self.config.get("routing_list", ROUTING_LIST)
         self.enforce_routing = self.config.get("enforce_routing", False)
@@ -1007,6 +1020,7 @@ class CAPE(ServiceBase):
                     sleep(5)
                     continue
 
+
     def submit_url(self, cape_task: CapeTask, parent_section: ResultSection) -> int:
         """
         This method submits the url to the CAPE server
@@ -1281,6 +1295,10 @@ class CAPE(ServiceBase):
         :param cape_task: The CapeTask class instance, which contains details about the specific task
         :return: None
         """
+        if not self.delete_cape_runs:
+            self.log.debug(f"Skipping deletion of task {cape_task.id}; delete_cape_runs is disabled.")
+            return
+
         if not self.delete_cape_runs:
             self.log.debug(f"Skipping deletion of task {cape_task.id}; delete_cape_runs is disabled.")
             return
@@ -2028,6 +2046,8 @@ class CAPE(ServiceBase):
             self._extract_hollowshunter(zip_obj, cape_task.id, main_process_tuples, ontres, custom_tree_id_safelist)
             self._extract_commands()
             self._extract_buffers()
+            self._extract_browser_logs()
+            self._extract_clipboard()
         except Exception as e:
             self.log.exception(f"Unable to add extra file(s) for " f"task {cape_task.id}. Exception: {e}")
         zip_obj.close()
@@ -2215,6 +2235,13 @@ class CAPE(ServiceBase):
                         file_name_map[file_json["path"]] = file_json["filepath"].split("\\")[-1]
             except Exception as e:
                 self.log.exception(f"Unable to parse files.json for task {task_id}. Exception: {e}")
+        artifact = {
+            "name": member_name,
+            "path": os.path.join(task_dir, member_name),
+            "description": "CAPE files mapping",
+            "to_be_extracted": False,
+        }
+        self.artifact_list.append(artifact)
         return file_name_map
 
     def _extract_console_output(self, task_id: int) -> None:
@@ -2281,6 +2308,7 @@ class CAPE(ServiceBase):
         """
         image_section = ResultMultiSection(f"Screenshots taken during Task {task_id}")
         image_section_body = ImageSectionBody(self.request)
+        screenshot_sha256s = []
         if self.config.get("use_antivm_packages", False) and self.request.file_type in [
             "code/javascript",
             "code/jscript",
@@ -2409,6 +2437,9 @@ class CAPE(ServiceBase):
                             "because we suspect it is garbage generated by Internet Explorer."
                         )
                         continue
+                    #If the file is actually extracted by an archive analysis extract it
+                    elif compile(EXTRACTED_FILES_REGEX).search(file_name_map.get(f, f)):
+                        file_name = f"src_{task_id}_{file_name_map.get(f, f)}"
 
                     elif file_type_details["type"] == "text/plain":
                         self.log.debug(
@@ -2425,6 +2456,14 @@ class CAPE(ServiceBase):
                     to_be_extracted = False
                     # AL generates thumbnails already
                     if "_small" not in f:
+                        # Check to see if screenshot was already added to section
+                        sha256 = self.identify.fileinfo(destination_file_path,
+                                                        skip_fuzzy_hashes=True, calculate_entropy=False)['sha256']
+                        if sha256 in screenshot_sha256s:
+                            # If duplicate screenshot, skip
+                            continue
+                        screenshot_sha256s.append(sha256)
+
                         try:
                             image_section_body.add_image(destination_file_path, file_name, value)
                         except OSError as e:
@@ -2600,6 +2639,18 @@ class CAPE(ServiceBase):
                             "path": entry.path,
                             "description": "Browser logs and doms",
                             "to_be_extracted": False,
+                        }
+                    )
+    def _extract_clipboard(self) -> None:
+        if os.path.exists(CLIPBOARD_PATH):
+            for entry in os.scandir(CLIPBOARD_PATH):
+                if entry.is_file():
+                    self.artifact_list.append(
+                        {
+                            "name": f"{entry.name}-clipboard",
+                            "path": entry.path,
+                            "description": "Clipboard events for processes",
+                            "to_be_extracted": True,
                         }
                     )
 
