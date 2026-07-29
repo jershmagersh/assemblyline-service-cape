@@ -1,4 +1,4 @@
-name: CAPE
+name: CAPE-Invoke
 version: $SERVICE_TAG
 description: This Assemblyline service submits files to a CAPEv2 deployment and parses the report returned.
 
@@ -19,7 +19,7 @@ file_required: true
 timeout: 800
 
 # is the service enabled by default
-enabled: false
+enabled: true
 privileged: true
 recursion_prevention: ["Dynamic Analysis"]
 
@@ -94,6 +94,9 @@ config:
   # for a period of time. This configuration will raise a RecoverableError in that situation, after a certain
   # time period.
   retry_on_no_machine: false
+
+  # Only analyze the submission root file. When false, extracted/child files are also submitted to CAPE.
+  root_file_only: true
 
   # Apply a limit of 1000 to APIs that the CAPE monitor logs (normally this value is 5000).
   limit_monitor_apis: false
@@ -696,7 +699,7 @@ heuristics:
 
 docker_config:
   allow_internet_access: true
-  image: ${REGISTRY}cccs/assemblyline-service-cape:$SERVICE_TAG
+  image: ${REGISTRY}jershmagersh/assemblyline-service-cape:$SERVICE_TAG
   cpu_cores: 1
   ram_mb: 2000
 
@@ -707,7 +710,7 @@ dependencies:
       ram_mb: 4096
       allow_internet_access: true
       command: ["python", "-m", "cape.update_server"]
-      image: ${REGISTRY}cccs/assemblyline-service-cape:$SERVICE_TAG
+      image: ${REGISTRY}jershmagersh/assemblyline-service-cape:$SERVICE_TAG
       ports: ["5003"]
     run_as_core: True
 

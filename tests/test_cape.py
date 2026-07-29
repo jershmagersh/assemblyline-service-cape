@@ -445,6 +445,7 @@ class TestCapeMain:
         assert cape_class_instance.retry_on_no_machine is False
         assert cape_class_instance.uwsgi_with_recycle is False
         assert cape_class_instance.delete_cape_runs is True
+        assert cape_class_instance.root_file_only is True
 
     @staticmethod
     def test_start(cape_class_instance, dummy_api_interface_class, mocker):
@@ -460,6 +461,7 @@ class TestCapeMain:
         assert cape_class_instance.retry_on_no_machine == cape_class_instance.config.get("retry_on_no_machine", False)
         assert cape_class_instance.uwsgi_with_recycle == cape_class_instance.config.get("uwsgi_with_recycle", False)
         assert cape_class_instance.delete_cape_runs == cape_class_instance.config.get("delete_cape_runs", True)
+        assert cape_class_instance.root_file_only == cape_class_instance.config.get("root_file_only", True)
         assert cape_class_instance.use_process_tree_inspection == cape_class_instance.config.get("use_process_tree_inspection", False)
         assert cape_class_instance.routes == cape_class_instance.config.get("routing_list", ROUTING_LIST)
         assert cape_class_instance.enforce_routing == cape_class_instance.config.get("enforce_routing", False)

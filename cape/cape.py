@@ -238,6 +238,7 @@ class CAPE(ServiceBase):
         self.retry_on_no_machine = False
         self.uwsgi_with_recycle = False
         self.delete_cape_runs = DEFAULT_DELETE_CAPE_RUNS
+        self.root_file_only = True
         self.classification = get_classification()
 
         # Properies pertaining to using YARA rules with CAPE
@@ -259,6 +260,7 @@ class CAPE(ServiceBase):
         self.retry_on_no_machine = self.config.get("retry_on_no_machine", False)
         self.uwsgi_with_recycle = self.config.get("uwsgi_with_recycle", False)
         self.delete_cape_runs = self.config.get("delete_cape_runs", DEFAULT_DELETE_CAPE_RUNS)
+        self.root_file_only = self.config.get("root_file_only", True)
         self.use_process_tree_inspection = self.config.get("use_process_tree_inspection", False)
         self.routes = self.config.get("routing_list", ROUTING_LIST)
         self.enforce_routing = self.config.get("enforce_routing", False)
@@ -270,6 +272,9 @@ class CAPE(ServiceBase):
 
     # noinspection PyTypeChecker
     def execute(self, request: ServiceRequest) -> None:
+        if self.root_file_only and request.task.depth != 0:
+            request.result = Result()
+            return
         self.request = request
 
         if self.enforce_routing and (self.request.get_param("routing").lower() not in self.routes):
@@ -1001,7 +1006,7 @@ class CAPE(ServiceBase):
                         logged = True
                     sleep(5)
                     continue
-    
+
     def submit_url(self, cape_task: CapeTask, parent_section: ResultSection) -> int:
         """
         This method submits the url to the CAPE server
@@ -2588,7 +2593,7 @@ class CAPE(ServiceBase):
                                         }
                                     )
                             except Exception as e:
-                                pass 
+                                pass
                     self.artifact_list.append(
                         {
                             "name": entry.name,
