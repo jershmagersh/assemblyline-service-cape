@@ -221,10 +221,10 @@ submission_params:
 
 heuristics:
   - heur_id: 1
-    name: CAPE Yara Hit
+    name: CAPE Signature
     score: 0
     filetype: "*"
-    description: "A hit on a yara rule from the CAPE ruleset"
+    description: "A CAPE behavioural signature was raised"
 
   - heur_id: 2
     attack_id: [T1518.001]
@@ -566,7 +566,7 @@ heuristics:
 
   - heur_id: 55
     name: CAPE Yara Hit
-    score: 0
+    score: 1000
     signature_score_map:
       # The following signatures are "nested" within the procmem_yara signature
       # If the score is 0, they are signatures that have the tendency to be a false positive
@@ -586,8 +586,15 @@ heuristics:
       script_in_lnk: 0
       # The main signature that wraps these Yara rules must have its score set to 0
       procmem_yara: 0
+      binary_yara: 0
     filetype: "*"
-    description: A hit for a Yara rule in CAPE was raised
+    description: A CAPE family/detection Yara rule hit (cape_yara), used for malware family attribution
+
+  - heur_id: 59
+    name: Yara Hit
+    score: 100
+    filetype: "*"
+    description: A hit on a general (non-CAPE) Yara rule from the CAPE report
 
   - heur_id: 3
     name: Suspicious_tree_id
@@ -692,10 +699,10 @@ heuristics:
     description: CAPE detected IOCs that were not found in network calls
 
   - heur_id: 9999
-    name: Unknown
+    name: Misc CAPE Signature
     score: 0
     filetype: "*"
-    description: Unknown signature detected by CAPE
+    description: Miscellaneous signature detected by CAPE
 
 docker_config:
   allow_internet_access: true

@@ -626,8 +626,15 @@ HOLLOWSHUNTER_SECTION_TITLE = "HollowsHunter Analysis"
 BUFFERS_SECTION_TITLE = "Buffers"
 INFO_SECTION_TITLE = "Analysis Information"
 CONFIG_EXTRACT_SECTION_TITLE = "Configs Extracted By CAPE"
+CAPE_YARA_SECTION_TITLE = "CAPE Yara Hits"
+YARA_SECTION_TITLE = "Yara Hits"
 PROCESS_TREE_AND_EVENTS_SECTION_TITLE = "Processes"
 ANALYSIS_ERRORS = "Analysis Errors"
+CAPE_YARA_HEUR_ID = 55
+YARA_HEUR_ID = 59
+DEFAULT_SIGNATURE_HEUR_ID = 1
+CAPE_YARA_SCORE = 1000
+YARA_SCORE = 100
 
 #Regexes and data types
 PORT_REGEX = r"((6553[0-5])|(655[0-2][0-9])|(65[0-4][0-9]{2})|(6[0-4][0-9]{3})|([1-5][0-9]{4})|([0-5]{0,5})|([0-9]{1,4}))"
@@ -850,6 +857,7 @@ def generate_al_result(
                         f.writelines(event)
 
     process_events = load_ontology_and_result_section(ontres, al_result, process_map, parsed_sysmon, dns_servers, validated_random_ip_range, dns_requests, low_level_flow, http_calls, uses_https_proxy_in_sandbox, signatures, safelist, processtree_id_safelist, routing, inetsim_dns_servers, signature_map, parsed_etw)
+    process_yara_hits(api_report, al_result, sigs, signature_map)
 
     #Process all the info from auxiliaries
         # Powershell logger
@@ -2473,11 +2481,133 @@ def process_cape(cape: Dict[str, Any], parent_result_section: ResultSection) -> 
                     continue
                 config_sec = ResultTableSection(f"{config_name} Config", parent=configs_sec)
                 config_sec.set_column_order(["type", "config_value"])
+                _ = add_tag(config_sec, "attribution.family", config_name)
 
                 for key, value in config_values.items():
                     config_sec.add_row(TableRow(type=key, config_value=value))
 
     return cape_artifacts
+
+
+def _collect_yara_hits_from_value(
+    value: Any,
+    artifact_type: str,
+    cape_hits: Dict[str, Tuple[str, str, Optional[str]]],
+    yara_hits: Dict[str, Tuple[str, str]],
+) -> None:
+    """Recursively collect cape_yara and yara hits from a CAPE report artifact."""
+    if isinstance(value, list):
+        for item in value:
+            _collect_yara_hits_from_value(item, artifact_type, cape_hits, yara_hits)
+        return
+    if not isinstance(value, dict):
+        return
+
+    artifact_name = safe_str(
+        value.get("name")
+        or value.get("path")
+        or value.get("sha256")
+        or artifact_type
+    )
+
+    for hit in value.get("cape_yara", []) or []:
+        if not isinstance(hit, dict) or not isinstance(hit.get("name"), str):
+            continue
+        rule_name = hit["name"]
+        normalized = rule_name.lower()
+        if normalized not in cape_hits:
+            cape_type = None
+            meta = hit.get("meta") or {}
+            if isinstance(meta, dict):
+                cape_type = meta.get("cape_type")
+            cape_hits[normalized] = (rule_name, artifact_name, cape_type)
+
+    for hit in value.get("yara", []) or []:
+        if not isinstance(hit, dict) or not isinstance(hit.get("name"), str):
+            continue
+        rule_name = hit["name"]
+        normalized = rule_name.lower()
+        if normalized not in yara_hits and normalized not in cape_hits:
+            yara_hits[normalized] = (rule_name, artifact_name)
+
+    for key, nested_value in value.items():
+        if key not in {"cape_yara", "yara"} and isinstance(nested_value, (dict, list)):
+            _collect_yara_hits_from_value(nested_value, artifact_name, cape_hits, yara_hits)
+
+
+def process_yara_hits(
+    api_report: Dict[str, Any],
+    parent_result_section: ResultSection,
+    signatures: List[Dict[str, Any]],
+    signature_map: Dict[str, Dict[str, Any]] = {},
+) -> None:
+    """
+    Report CAPE family Yara hits (cape_yara) at high score with attribution.family tags,
+    and report any remaining general Yara hits under a separate heuristic.
+    Hits already raised via behavioural signatures (procmem_yara / binary_yara) are skipped
+    to avoid double-counting.
+    """
+    behavioural_hits: Set[str] = set()
+    for signature in signatures or []:
+        if signature.get("name") not in {"procmem_yara", "binary_yara"}:
+            continue
+        for mark in signature.get("data", []) or []:
+            hit = mark.get("Hit") if isinstance(mark, dict) else None
+            if not isinstance(hit, str):
+                continue
+            match = search(YARA_RULE_EXTRACTOR, hit)
+            if match:
+                behavioural_hits.add(match.group(2).lower())
+
+    cape_hits: Dict[str, Tuple[str, str, Optional[str]]] = {}
+    yara_hits: Dict[str, Tuple[str, str]] = {}
+    artifact_roots = [
+        ("target", api_report.get("target", {}).get("file", {})),
+        ("dropped", api_report.get("dropped", [])),
+        ("procdump", api_report.get("procdump", [])),
+        ("CAPE payload", api_report.get("CAPE", {}).get("payloads", [])),
+    ]
+    for artifact_type, artifact_root in artifact_roots:
+        _collect_yara_hits_from_value(artifact_root, artifact_type, cape_hits, yara_hits)
+
+    # Drop anything already reported by behavioural Yara signatures
+    cape_hits = {k: v for k, v in cape_hits.items() if k not in behavioural_hits}
+    yara_hits = {k: v for k, v in yara_hits.items() if k not in behavioural_hits and k not in cape_hits}
+
+    if cape_hits:
+        cape_yara_section = ResultMultiSection(CAPE_YARA_SECTION_TITLE)
+        cape_yara_section.set_heuristic(CAPE_YARA_HEUR_ID)
+        for normalized_name, (rule_name, artifact_name, cape_type) in cape_hits.items():
+            source_name = "CAPE"
+            for sig_info in signature_map.values():
+                if sig_info.get("name") == rule_name:
+                    source_name = sig_info.get("source", source_name)
+                    break
+            cape_yara_section.heuristic.add_signature_id(rule_name, CAPE_YARA_SCORE)
+            _ = add_tag(cape_yara_section, "file.rule.cape", f"{source_name}.{rule_name}")
+            _ = add_tag(cape_yara_section, "attribution.family", rule_name)
+            body = KVSectionBody(
+                rule=rule_name,
+                artifact=artifact_name,
+                cape_type=cape_type or "",
+            )
+            cape_yara_section.add_section_part(body)
+        parent_result_section.add_subsection(cape_yara_section)
+
+    if yara_hits:
+        yara_section = ResultMultiSection(YARA_SECTION_TITLE)
+        yara_section.set_heuristic(YARA_HEUR_ID)
+        for normalized_name, (rule_name, artifact_name) in yara_hits.items():
+            source_name = "CAPE"
+            for sig_info in signature_map.values():
+                if sig_info.get("name") == rule_name:
+                    source_name = sig_info.get("source", source_name)
+                    break
+            yara_section.heuristic.add_signature_id(rule_name, YARA_SCORE)
+            _ = add_tag(yara_section, "file.rule.cape", f"{source_name}.{rule_name}")
+            body = KVSectionBody(rule=rule_name, artifact=artifact_name)
+            yara_section.add_section_part(body)
+        parent_result_section.add_subsection(yara_section)
 
 def get_process_map(
     processes: List[Dict[str, Any]], safelist: Dict[str, Dict[str, List[str]]]
@@ -3568,19 +3698,21 @@ def _set_heuristic_signature(
     :return: None
     """
     sig_category = get_category(name)
-    heuristic_id = 1
+    heuristic_id = DEFAULT_SIGNATURE_HEUR_ID
     if sig_category == "unknown":
         heuristic_id = 9999
         log.warning(f"Unknown signature detected: {signature}")
-    if sig_category == "Capemon Yara Hit":
-        heuristic_id = 2
+    elif sig_category == "Capemon Yara Hit":
+        heuristic_id = CAPE_YARA_HEUR_ID
     # Creating heuristic
     sig_res.set_heuristic(heuristic_id)
 
     # Adding signature and score
     if sig_category != "unknown":
-        name = sig_category + ":" + name 
-    sig_res.heuristic.add_signature_id(name, score=translated_score)
+        name = sig_category + ":" + name
+    # Capemon wrapper signatures themselves should not contribute score; nested rules do via marks
+    signature_score = 0 if sig_category == "Capemon Yara Hit" else translated_score
+    sig_res.heuristic.add_signature_id(name, score=signature_score)
 
 def _set_attack_ids(attack_ids: Dict[str, Dict[str, str]], sig_res: ResultMultiSection, ontres_sig: Signature) -> None:
     """

@@ -56,6 +56,7 @@ from cape.cape_result import (
     process_hollowshunter,
     process_buffers,
     process_cape,
+    process_yara_hits,
     get_process_map,
     build_process_tree,
     process_sysmon,
@@ -631,6 +632,64 @@ class TestCapeResult:
             cape_section = section[0] if len(section) > 0 else None 
             if len(al_result.subsections) > 0 or cape_section is not None:
                 assert check_section_equality(al_result.subsections[0], cape_section)
+
+    def test_process_yara_hits(self):
+        al_result = ResultSection("Parent")
+        api_report = {
+            "target": {
+                "file": {
+                    "name": "sample.exe",
+                    "cape_yara": [
+                        {
+                            "name": "Remus",
+                            "meta": {
+                                "description": "Remus information stealer payload",
+                                "cape_type": "Remus Payload",
+                            },
+                        }
+                    ],
+                    "yara": [{"name": "generic_packer"}],
+                }
+            },
+            "CAPE": {
+                "payloads": [
+                    {
+                        "sha256": "a" * 64,
+                        "cape_yara": [{"name": "already_reported"}],
+                    }
+                ]
+            },
+        }
+        signatures = [
+            {
+                "name": "procmem_yara",
+                "data": [{"Hit": "PID 1234 triggered the Yara rule 'already_reported'"}],
+            }
+        ]
+        signature_map = {
+            "remus": {
+                "name": "Remus",
+                "source": "internal-cape-yara",
+            }
+        }
+
+        process_yara_hits(api_report, al_result, signatures, signature_map)
+
+        assert len(al_result.subsections) == 2
+        cape_yara_section = al_result.subsections[0]
+        assert cape_yara_section.title_text == "CAPE Yara Hits"
+        assert cape_yara_section.heuristic.heur_id == 55
+        assert cape_yara_section.heuristic.signatures == {"Remus": 1}
+        assert cape_yara_section.heuristic.score == 1000
+        assert cape_yara_section.tags["file.rule.cape"] == ["internal-cape-yara.Remus"]
+        assert cape_yara_section.tags["attribution.family"] == ["Remus"]
+
+        yara_section = al_result.subsections[1]
+        assert yara_section.title_text == "Yara Hits"
+        assert yara_section.heuristic.heur_id == 59
+        assert yara_section.heuristic.signatures == {"generic_packer": 1}
+        assert yara_section.heuristic.score == 100
+        assert "attribution.family" not in yara_section.tags
 
     def test_process_behavior(self, loaded_samples):
         for sample in loaded_samples:
@@ -1318,8 +1377,10 @@ class TestCapeResult:
             safelist,
             uses_https_proxy_in_sandbox,
         )
-        assert actual_res_sec.heuristic.score == 1500
-        assert actual_res_sec.heuristic.name == "Anti-analysis"
+        # Wrapper score is 0; embedded_win_api is zeroed via signature_score_map;
+        # only INDICATOR_EXE_Packed_GEN01 contributes 500.
+        assert actual_res_sec.heuristic.score == 500
+        assert actual_res_sec.heuristic.name == "CAPE Yara Hit"
 
     def test_handle_mark_call(self):
         # Case 1: pid is None
@@ -1578,7 +1639,7 @@ class TestCapeResult:
         sig_res = ResultMultiSection("blah")
         translated_score = 0
         _set_heuristic_signature(name, signature, sig_res, translated_score)
-        assert sig_res.heuristic.heur_id == 2
+        assert sig_res.heuristic.heur_id == 55
         assert sig_res.heuristic.signatures == {output_name: 1}
         assert sig_res.heuristic.score == 0
 

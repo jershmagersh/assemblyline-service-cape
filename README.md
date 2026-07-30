@@ -39,9 +39,11 @@ It should be noted that this service grabs the `lite` format of the report bundl
 ```
 [litereport]
 enabled = yes
-keys_to_copy = info debug signatures network curtain sysmon target
+keys_to_copy = info debug signatures network curtain sysmon target CAPE
 behavior_keys_to_copy = processtree processes summary
 ```
+
+`CAPE` must be included in `keys_to_copy` so that extracted malware configs (`CAPE.configs`) and CAPE payload Yara hits (`CAPE.payloads[].cape_yara`) are present in the lite report. Family detection Yara hits on the submitted file itself come from `target.file.cape_yara`.
 
 #### REST API
 
@@ -146,9 +148,11 @@ Il faut noter que ce service récupère le format `lite` du paquet de rapports. 
 ```
 [litereport]
 enabled = yes
-keys_to_copy = info debug signatures network curtain sysmon target
+keys_to_copy = info debug signatures network curtain sysmon target CAPE
 behavior_keys_to_copy = processtree process summary
 ```
+
+`CAPE` doit être inclus dans `keys_to_copy` afin que les configurations extraites (`CAPE.configs`) et les détections Yara des payloads (`CAPE.payloads[].cape_yara`) soient présentes dans le rapport lite. Les détections Yara familiales sur le fichier soumis proviennent de `target.file.cape_yara`.
 
 #### API REST
 
