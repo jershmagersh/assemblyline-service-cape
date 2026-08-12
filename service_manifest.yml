@@ -76,6 +76,7 @@ config:
   machinery_supports_memory_dumps: false
   reboot_supported: false
   extract_cape_dumps: false
+  extract_cape_payloads: false
   uses_https_proxy_in_sandbox: false
   suspicious_accepted_languages: []
 

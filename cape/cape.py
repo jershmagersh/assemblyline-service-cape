@@ -2328,15 +2328,17 @@ class CAPE(ServiceBase):
             "network": None,  # These are only used for updating the sandbox ontology
             "files/": "File extracted during analysis",
             "sum.pcap": "TCPDUMP captured during analysis",
-            # These keys will only be accessed if deep scan is on or if a CAPE payload
-            # has a YARA rule associated with it
-            "CAPE": "Memory Dump",
+            # These keys will only be extracted if extract_cape_dumps is enabled.
+            # procdump contains process dumps; CAPE contains unpacked payloads/configs.
             "procdump": "Memory Dump",
             "ETW/etw_dns.json": "ETW monitor DNS logs",
             "ETW/etw_netevent.json": "ETW monitor network event logs",
             "ETW/etw_proc_spoof.json": "ETW monitor process creation logs",
             "ETW/wmi_etw.json": "ETW monitor WMI logs",
         }
+        if self.config.get("extract_cape_payloads", False):
+            zip_file_map["CAPE"] = "CAPE payload"
+
         if self.request.deep_scan:
             zip_file_map["macros"] = "Macros found during analysis"
 
@@ -2393,28 +2395,31 @@ class CAPE(ServiceBase):
                 file_name = None
                 to_be_extracted = True
 
-                # If we are here, we really want to make sure we want these dumps
+                # If we are here, we really want to make sure we want these dumps/payloads.
                 if key in ["CAPE", "procdump"]:
-                    if self.config["extract_cape_dumps"] and not self.request.deep_scan:
-                        yara_hit = False
-                        # If we don't want them all, we only want those with yara hits
-                        for artifact_dict in cape_artifact_pids:
-                            if artifact_dict["sha256"] in f and artifact_dict["is_yara_hit"]:
-                                yara_hit = True
-                                break
+                    if not self.config.get("extract_cape_dumps", False):
+                        continue
 
-                        # We don't want this
-                        if not yara_hit:
-                            continue
-
-                    pid = next(
+                    matching_artifact = next(
                         (
-                            artifact_dict.get("pid")
+                            artifact_dict
                             for artifact_dict in cape_artifact_pids
                             if artifact_dict.get("sha256") and artifact_dict["sha256"] in f
                         ),
                         None,
                     )
+
+                    if key == "CAPE":
+                        # CAPE/ contains unpacked payloads/configs. Only upload payload files listed in the CAPE
+                        # report's Payloads section, but do not require a YARA hit for those payloads.
+                        if not matching_artifact:
+                            continue
+                    elif not self.request.deep_scan:
+                        # If we don't want all process dumps, we only want those with YARA hits.
+                        if not matching_artifact or not matching_artifact["is_yara_hit"]:
+                            continue
+
+                    pid = matching_artifact.get("pid") if matching_artifact else None
                     if pid:
                         file_name = f"{task_id}_{pid}_{file_name_map.get(f, f)}"
                 # The majority of files extracted by CAPE are junk and follow a similar file type pattern
