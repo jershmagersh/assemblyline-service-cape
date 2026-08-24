@@ -2454,6 +2454,27 @@ def process_buffers(
             buffer_res.set_heuristic(1006)
         parent_result_section.add_subsection(buffer_res)
 
+def _format_config_signature_id(config_name: str, key: str, value: Any) -> str:
+    if isinstance(value, (dict, list)):
+        value_text = json.dumps(value, sort_keys=True, default=safe_str)
+    else:
+        value_text = safe_str(value)
+    value_text = " ".join(value_text.split())
+    signature_id = f"{config_name}.{key}: {value_text}"
+    return signature_id[:250]
+
+
+def _format_config_section_title(config_names: Set[str]) -> str:
+    if not config_names:
+        return CONFIG_EXTRACT_SECTION_TITLE
+    sorted_names = sorted(config_names)
+    displayed_names = sorted_names[:5]
+    suffix = ", ".join(displayed_names)
+    if len(sorted_names) > len(displayed_names):
+        suffix += f", +{len(sorted_names) - len(displayed_names)} more"
+    return f"{CONFIG_EXTRACT_SECTION_TITLE}: {suffix}"
+
+
 def process_cape(cape: Dict[str, Any], parent_result_section: ResultSection) -> List[Dict[str, str]]:
     """
     This method creates a map of payloads and the pids that they were hollowed out of
@@ -2473,8 +2494,8 @@ def process_cape(cape: Dict[str, Any], parent_result_section: ResultSection) -> 
 
     if cape.get("configs", []):
         malware_heur = Heuristic(5)
-        malware_heur.add_signature_id("config_extracted", 1000)
         configs_sec = ResultSection(CONFIG_EXTRACT_SECTION_TITLE, parent=parent_result_section, heuristic=malware_heur)
+        scored_configs = set()
 
         for configuration in cape["configs"]:
             for config_name, config_values in configuration.items():
@@ -2483,9 +2504,15 @@ def process_cape(cape: Dict[str, Any], parent_result_section: ResultSection) -> 
                 config_sec = ResultTableSection(f"{config_name} Config", parent=configs_sec)
                 config_sec.set_column_order(["type", "config_value"])
                 _ = add_tag(config_sec, "attribution.family", config_name)
+                if config_name not in scored_configs:
+                    malware_heur.add_signature_id(f"config_extracted.{config_name}", 1000)
+                    scored_configs.add(config_name)
 
                 for key, value in config_values.items():
                     config_sec.add_row(TableRow(type=key, config_value=value))
+                    malware_heur.add_signature_id(_format_config_signature_id(config_name, key, value), 0)
+
+        configs_sec.title_text = _format_config_section_title(scored_configs)
 
     return cape_artifacts
 

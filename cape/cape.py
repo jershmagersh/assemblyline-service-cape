@@ -285,7 +285,17 @@ class CAPE(ServiceBase):
 
     # noinspection PyTypeChecker
     def execute(self, request: ServiceRequest) -> None:
-        if self.root_file_only and request.task.depth != 0:
+        task_depth = getattr(request.task, "depth", 0)
+        will_skip = self.root_file_only and task_depth != 0
+        gate_context = (
+            f"CAPE gate: file_type={getattr(request, 'file_type', None)} "
+            f"file_name={getattr(request.task, 'file_name', None)} "
+            f"sha256={getattr(request, 'sha256', None)} "
+            f"depth={task_depth} root_file_only={self.root_file_only} will_skip={will_skip}"
+        )
+        self.log.warning(gate_context)
+        request.set_service_context(gate_context)
+        if will_skip:
             request.result = Result()
             return
         self.request = request
@@ -298,7 +308,9 @@ class CAPE(ServiceBase):
         floor_of_epoch_multiples = floor(current_epoch_time / update_period)
         lower_range = floor_of_epoch_multiples * update_period
         upper_range = lower_range + update_period
-        request.set_service_context(f"Nest Update Range: {epoch_to_local(lower_range)} - {epoch_to_local(upper_range)}")
+        request.set_service_context(
+            f"{gate_context}\nNest Update Range: {epoch_to_local(lower_range)} - {epoch_to_local(upper_range)}"
+        )
 
         self.session = requests.Session()
         self.artifact_list = []
