@@ -48,7 +48,8 @@ The method for interpretting this structure is that files are divided between Li
 - `max_dll_exports_exec` - [default: 5] Limiting the amount of DLLs executed that we report about.
 - `machinery_supports_memory_dumps` - [default: False] A boolean flag indicating if the CAPE machinery supports dumping memory.
 - `reboot_supported` - [default: False] A boolean flag indicating if the CAPE machinery supports reboot submissions. _NB_: Reboot support is not available out of the box for CAPE.
-- `extract_cape_dumps` - [default: False] CAPE extracts a lot of stuff. Some may say "TOO MUCH". Enable this setting if you want files that are uploaded to the `CAPE` and `procdump` directories per analysis to be extracted by Assemblyline. Note that you still have to select "deep_scan" after this setting is enabled if you want all of the CAPE dumps, otherwise the service will be choosey about which dumps are extracted.
+- `extract_cape_dumps` - [default: False] Enable this setting if you want process dumps uploaded to the `procdump` directory per analysis to be extracted by Assemblyline. Note that you still have to select "deep_scan" after this setting is enabled if you want all of the process dumps, otherwise the service will be choosey about which dumps are extracted.
+- `extract_cape_payloads` - [default: False] Enable this setting if you also want unpacked payloads/configs uploaded to CAPEv2's `CAPE` directory per analysis to be extracted by Assemblyline. This setting has no effect unless `extract_cape_dumps` is enabled.
 - `uses_https_proxy_in_sandbox` - [default: False] A boolean flag indicating if the sandbox architecture uses an HTTPS proxy to decrypt and forward traffic.
 - `suspicious_accepted_languages` - [default: []] This is a list of languages in the "Accepted-Language" HTTP header that should be flagged as suspicious.
 
@@ -246,7 +247,8 @@ La méthode d'interprétation de cette structure est que les fichiers sont répa
 - `max_dll_exports_exec` - [défaut : 5] Limite la quantité de DLL exécutées dont nous rendons compte.
 - `machinery_supports_memory_dumps` - [défaut : False] Indicateur booléen indiquant si la machine CAPE prend en charge le dumping de la mémoire.
 - `reboot_supported` - [default : False] Indicateur booléen indiquant si les machines de l'ACPE prennent en charge les soumissions de redémarrage. NB_ : La prise en charge du redémarrage n'est pas disponible d'emblée pour l'ACEP.
-- `extract_cape_dumps` - [default : False] L'ACEP extrait beaucoup de choses. Certains diront "TROP". Activez ce paramètre si vous voulez que les fichiers qui sont téléchargés dans les répertoires `CAPE` et `procdump` par analyse soient extraits par Assemblyline. Notez que vous devez toujours sélectionner "deep_scan" après l'activation de ce paramètre si vous voulez tous les dumps CAPE, sinon le service choisira les dumps à extraire.
+- `extract_cape_dumps` - [default : False] Activez ce paramètre si vous voulez que les dumps de processus téléchargés dans le répertoire `procdump` par analyse soient extraits par Assemblyline. Notez que vous devez toujours sélectionner "deep_scan" après l'activation de ce paramètre si vous voulez tous les dumps de processus, sinon le service choisira les dumps à extraire.
+- `extract_cape_payloads` - [default : False] Activez ce paramètre si vous voulez aussi que les payloads/configurations dépaquetés téléchargés dans le répertoire `CAPE` de CAPEv2 par analyse soient extraits par Assemblyline. Ce paramètre n'a aucun effet sauf si `extract_cape_dumps` est activé.
 - `uses_https_proxy_in_sandbox` - [default : False] Indicateur booléen indiquant si l'architecture du bac à sable utilise un proxy HTTPS pour déchiffrer et transmettre le trafic.
 - `suspicious_accepted_languages` - [default : []] Il s'agit d'une liste de langues dans l'en-tête HTTP "Accepted-Language" qui devraient être signalées comme suspectes.
 

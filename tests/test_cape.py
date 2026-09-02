@@ -2154,6 +2154,7 @@ class TestCapeMain:
         cape_class_instance.request = dummy_request_class()
         cape_class_instance.request.deep_scan = False
         cape_class_instance.config["extract_cape_dumps"] = True
+        cape_class_instance.config["extract_cape_payloads"] = True
 
         correct_image_section = ResultMultiSection(
             f"Screenshots taken during Task {task_id}",
@@ -2184,21 +2185,20 @@ class TestCapeMain:
                 "to_be_extracted": False,
             }
         )
-        # This is NOT added to the artifact list because it does not have a yara hit
-        # correct_artifact_list.append(
-        #     {
-        #         "path": f"{cape_class_instance.working_directory}/{task_id}/CAPE/ohmy.exe",
-        #         "name": f"{task_id}_3_ohmy.exe",
-        #         "description": "Memory Dump",
-        #         "to_be_extracted": True,
-        #     }
-        # )
-        # This IS added to the artifact list because it does have a yara hit
+        # CAPE payloads from the report's Payloads section are added even when they do not have a YARA hit.
+        correct_artifact_list.append(
+            {
+                "path": f"{cape_class_instance.working_directory}/{task_id}/CAPE/ohmy.exe",
+                "name": f"{task_id}_3_ohmy.exe",
+                "description": "CAPE payload",
+                "to_be_extracted": True,
+            }
+        )
         correct_artifact_list.append(
             {
                 "path": f"{cape_class_instance.working_directory}/{task_id}/CAPE/yarahit.exe",
                 "name": f"{task_id}_3_yarahit.exe",
-                "description": "Memory Dump",
+                "description": "CAPE payload",
                 "to_be_extracted": True,
             }
         )
