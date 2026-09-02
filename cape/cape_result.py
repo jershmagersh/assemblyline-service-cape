@@ -81,8 +81,8 @@ global_safelist: Optional[Dict[str, Dict[str, List[str]]]] = None
 SCORE_TRANSLATION = {
     0: 0,
     1: 10,
-    2: 30,
-    3: 50,
+    2: 10,
+    3: 10,
     4: 500,
     5: 750,
     6: 1000,

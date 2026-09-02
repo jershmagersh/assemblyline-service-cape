@@ -622,13 +622,13 @@ heuristics:
 
   - heur_id: 1000
     name: Domain detected
-    score: 10
+    score: 0
     filetype: "*"
     description: CAPE detected Domains
 
   - heur_id: 1002
     name: HTTP/HTTPS detected
-    score: 10
+    score: 0
     filetype: "*"
     description: CAPE detected HTTP/HTTPS requests
 
@@ -640,7 +640,7 @@ heuristics:
 
   - heur_id: 1004
     name: TCP/UDP Detected
-    score: 10
+    score: 0
     filetype: "*"
     description: CAPE detected traffic made over TCP/UDP
 
@@ -676,25 +676,25 @@ heuristics:
 
   - heur_id: 1010
     name: TCP Detected
-    score: 10
+    score: 0
     filetype: "*"
     description: CAPE detected traffic made over TCP
 
   - heur_id: 1011
     name: UDP Detected
-    score: 10
+    score: 0
     filetype: "*"
     description: CAPE detected traffic made over UDP
 
   - heur_id: 1012
     name: Non-Standard HTTP Header Used
-    score: 1
+    score: 0
     filetype: "*"
     description: CAPE detected a non-standard HTTP header being used
 
   - heur_id: 1013
     name: Unseen IOCs found in API calls
-    score: 1
+    score: 0
     filetype: "*"
     description: CAPE detected IOCs that were not found in network calls
 
