@@ -3,17 +3,29 @@ Dockerfile
 .git
 .gitignore
 .vscode
+.devcontainer
 .dockerignore
+.cruft.json
 
 pipelines
 venv
 .venv
 env
 .env
+.env.*
 test
 tests
 examples
+example-lite-reports
 docs
+
+# Local analysis/debug artifacts must never enter the build context.
+Screenshot*
+*.pcap
+*.pcapng
+*.dmp
+*.dump
+*_cape_report.zip
 
 build
 dist

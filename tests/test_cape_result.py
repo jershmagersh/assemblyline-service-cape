@@ -633,6 +633,38 @@ class TestCapeResult:
             if len(al_result.subsections) > 0 or cape_section is not None:
                 assert check_section_equality(al_result.subsections[0], cape_section)
 
+    def test_process_cape_configs_are_in_heuristic_table(self):
+        al_result = ResultSection("Parent")
+        cape = {
+            "configs": [
+                {
+                    "Emotet": {"c2": ["one.example"], "campaign": "alpha"},
+                    "_metadata": {"ignored": True},
+                },
+                {"Qakbot": {"botnet": "foo"}},
+            ]
+        }
+
+        process_cape(cape, al_result)
+
+        assert len(al_result.subsections) == 1
+        config_section = al_result.subsections[0]
+        assert isinstance(config_section, ResultTableSection)
+        assert config_section.subsections == []
+        assert config_section.heuristic.heur_id == 5
+        assert config_section.body_config["column_order"] == ["config_name", "type", "config_value"]
+        assert json.loads(config_section.body) == [
+            {"config_name": "Emotet", "type": "c2", "config_value": ["one.example"]},
+            {"config_name": "Emotet", "type": "campaign", "config_value": "alpha"},
+            {"config_name": "Qakbot", "type": "botnet", "config_value": "foo"},
+        ]
+        assert config_section.tags["attribution.family"] == ["Emotet", "Qakbot"]
+        assert config_section.heuristic.signatures["config_extracted.Emotet"] == 1
+        assert config_section.heuristic.signatures["config_extracted.Qakbot"] == 1
+        assert config_section.heuristic.signatures['Emotet.c2: ["one.example"]'] == 1
+        assert config_section.heuristic.signatures["Emotet.campaign: alpha"] == 1
+        assert config_section.heuristic.signatures["Qakbot.botnet: foo"] == 1
+
     def test_process_yara_hits(self):
         al_result = ResultSection("Parent")
         api_report = {

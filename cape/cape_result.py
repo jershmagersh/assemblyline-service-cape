@@ -2494,23 +2494,27 @@ def process_cape(cape: Dict[str, Any], parent_result_section: ResultSection) -> 
 
     if cape.get("configs", []):
         malware_heur = Heuristic(5)
-        configs_sec = ResultSection(CONFIG_EXTRACT_SECTION_TITLE, parent=parent_result_section, heuristic=malware_heur)
+        configs_sec = ResultTableSection(
+            CONFIG_EXTRACT_SECTION_TITLE,
+            parent=parent_result_section,
+            heuristic=malware_heur,
+        )
+        configs_sec.set_column_order(["config_name", "type", "config_value"])
         scored_configs = set()
 
         for configuration in cape["configs"]:
             for config_name, config_values in configuration.items():
                 if config_name.startswith("_"):
                     continue
-                config_sec = ResultTableSection(f"{config_name} Config", parent=configs_sec)
-                config_sec.set_column_order(["type", "config_value"])
-                _ = add_tag(config_sec, "attribution.family", config_name)
+                _ = add_tag(configs_sec, "attribution.family", config_name)
                 if config_name not in scored_configs:
                     malware_heur.add_signature_id(f"config_extracted.{config_name}", 1000)
                     scored_configs.add(config_name)
 
                 for key, value in config_values.items():
-                    config_sec.add_row(TableRow(type=key, config_value=value))
-                    malware_heur.add_signature_id(_format_config_signature_id(config_name, key, value), 0)
+                    config_item = _format_config_signature_id(config_name, key, value)
+                    configs_sec.add_row(TableRow(config_name=config_name, type=key, config_value=value))
+                    malware_heur.add_signature_id(config_item, 0)
 
         configs_sec.title_text = _format_config_section_title(scored_configs)
 

@@ -213,4 +213,8 @@ tags
 .history
 .ionide
 
+# Local analysis/debug artifacts
+example-lite-reports/
+Screenshot*
+
 # End of https://www.toptal.com/developers/gitignore/api/python,vim,visualstudiocode

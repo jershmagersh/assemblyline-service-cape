@@ -22,9 +22,11 @@ RUN pip install \
     --requirement requirements.txt && \
     rm -rf ~/.cache/pip
 
-# Copy service code
+# Copy only files required at runtime. Avoid copying reports, tests, editor
+# settings, or other local build-context files into the image.
 WORKDIR /opt/al_service
-COPY . .
+COPY cape cape
+COPY service_manifest.yml service_manifest.yml
 
 # Patch version in manifest
 ARG version=1.0.0.dev1

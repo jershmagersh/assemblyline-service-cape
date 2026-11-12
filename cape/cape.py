@@ -1782,14 +1782,14 @@ class CAPE(ServiceBase):
                 task_options.append(f"password={password}")
                 if ":" in password:
                     task_options.append("enable_multi_password=true")
-                    self.log.debug(f"Trying to run archive with password(s): {password}")
+                    self.log.debug("Trying to run archive with multiple supplied passwords")
 
             # No. 2: via temp_submission_data
             elif self.request.temp_submission_data.get("passwords"):
                 multiple_password_arg = ":".join(self.request.temp_submission_data["passwords"])
                 task_options.append(f"password={multiple_password_arg}")
                 task_options.append("enable_multi_password=true")
-                self.log.debug(f"Trying to run archive with password(s): {multiple_password_arg}")
+                self.log.debug("Trying to run archive with passwords from temporary submission data")
 
         kwargs["options"] = ",".join(task_options)
         if custom_options is not None:
